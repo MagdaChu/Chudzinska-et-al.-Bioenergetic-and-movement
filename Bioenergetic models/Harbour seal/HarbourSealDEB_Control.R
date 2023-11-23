@@ -4,41 +4,36 @@ library(parallel)
 library(doParallel)
 library(foreach)
 
+# set your working directory where you store in the input code
+# NOTE THAT YOU HAVE TO REDEFINE YOUR DIRECTORY AROUND LINE 80 AGAIN
+setwd("")
 
-setwd("C:/Users/mec21/OneDrive - University of St Andrews/SMRU/DEB_SMRUC/DEB paper code/DEB models/Harbour seal/")
-numCores <- 9#detectCores()-1
+# define number of computer cores you want to use. The code is written to run parallel simulations
+
+numCores <- detectCores()-2 # default is all computer cores - 2
 
 # for full combination of p_dist and disturbance.effect
-# CHANGE DOSE.RESPONSE TO FALSE
-# disturbance.effect.h <- c(0,1,2,4,6,8,12) # disturbance effect in hours
-# p_dist1 <- c(0.05,0.1,0.2,0.4,0.6,0.8,1)
-# comb <- expand.grid(disturbance.effect.h = disturbance.effect.h ,p_dist1 = p_dist1)
-# trr <- comb[comb$disturbance.effect.h==0,]
-# comb <- comb[c(-8,-15,-22,-29,-36,-43),]
-
-# disturbance.effect.h <- c(0,6,8,12) # disturbance effect in hours
-# p_dist1 <- c(0.6,0.8,1)
-# comb <- expand.grid(disturbance.effect.h = disturbance.effect.h ,p_dist1 = p_dist1)
-# trr <- comb[comb$disturbance.effect.h==0,]
-# comb <- comb[c(-5,-9,-12,-3,-6,-2),]
-
-# for dose-reponse analysis (bomb)
-
-disturbance.effect.h <- c(0)#,1,2,4,6,8,12) # disturbance effect in hours
-p_dist1 <- c(0.05,0.1,0.2,0.4,0.6,0.8,1) #0.6,0.8,
+qdisturbance.effect.h <- c(0,1,2,4,6,8,12) # disturbance effect in hours
+p_dist1 <- c(0.05,0.1,0.2,0.4,0.6,0.8,1)
 comb <- expand.grid(disturbance.effect.h = disturbance.effect.h ,p_dist1 = p_dist1)
-# 
+trr <- comb[comb$disturbance.effect.h==0,]
 
-### this piece of code (to line 36) is just to get first.day and start.piling, the piling is also loaded later in the code
-piling.file <- "DEB_PS1.csv"
+# removing all combinations with disturbance = 0h. Only one is needed
+comb <- comb[c(-8,-15,-22,-29,-36,-43),]
+
+# upload piling schedule. You can upload your own, just make sure you follow the format as in the example
+piling.file <- "DEB_PS1.csv" 
 pile <- read.csv(file = piling.file, header = TRUE)
 All_Dates <- strptime(pile[,3],format="%d/%m/%Y")
 All_Durations <- pile[,2]
 Dates <- unique(All_Dates)
 
+
+
 # determine Julian date for first day in piling file
 first.day <- Dates$yday[1] + 1
 age.affected <- c(7)
+
 source('HarbourSealDEB_Params.R')
 first.julian_days <- which(julian_days==first.day)
 start_pile <- first.julian_days[age.affected] # first day of piling at the age when porpoise is affected
@@ -47,7 +42,7 @@ difStartP2B <- first.day + ((365-mean_birthday) + 10)
 start_adcalf_birthdeath_new4s <- start_pile - difStartP2B
 
 ###
-sim_number_full <- 2002
+sim_number_full <- 2002 # define your modelled population size
 
 
 load("HarbourSeal_ParamsFromABC_lowerPS.RData")
@@ -68,7 +63,7 @@ finalResultsDisturbDeathListPup <- list()
 
 for ( dd in 1:nrow(comb)){ #nrow(comb) # this loop should run as many times as we have disturbance days
 
-    for (difparam in 1:90){ # in this loop, each disturbance scenario is run 100 times, each time drawing from different, plausible parameter combination
+    for (difparam in 1:100){ # in this loop, each disturbance scenario is run 100 times, each time drawing from different, plausible parameter combination
 
 doParallel::registerDoParallel(cl <- makeCluster(spec = numCores, type = "PSOCK",setup_strategy = "sequential"))
   
@@ -85,23 +80,12 @@ doParallel::registerDoParallel(cl <- makeCluster(spec = numCores, type = "PSOCK"
   rho_s <- paramFilt$rho_s[difparam]
   R_prop_lactation <- paramFilt$R_prop_lactation[difparam]
 
-  # for low Rmean simulations, I will use the values from the pre-abs analysis, but decrease Rmean from 2.1 to 1.65
-  Kappa <-0.2
-  upsilon <- 1.8
-  Tr <- 60
-  mu_s <-0.2
-  Sigma_M_full <- 2.3
-  Rmean <- 1.65
-  decision_day <- 160
-  rho_s <- 0.1
-  R_prop_lactation <- 0.6
-  
   set.seed(Sys.time())
   
   clusterExport(cl, list("Kappa",  "upsilon","Tr","mu_s","Sigma_M_full","decision_day","rho_s","Rmean", "numCores","comb","dd","difparam","R_prop_lactation","start_pile","sim_number_full","age.affected","pile","start_adcalf_birthdeath_new4s")) #, envir = env "eta", "xi_m", "skipping_point",
   
 results <- parallel::clusterEvalQ(cl = cl, expr = { 
-  setwd("C:/Users/mec21/OneDrive - University of St Andrews/SMRU/DEB_SMRUC/DEB paper code/DEB models/Harbour seal/")
+  setwd("")
   
   spec <- 'HS'
 
@@ -109,12 +93,10 @@ results <- parallel::clusterEvalQ(cl = cl, expr = {
   # specify no disturbance
   is_disturbance <- TRUE
   model.piling <- TRUE
-  dose.response <- TRUE
+  dose.response <- FALSE
   
   # all files and parameters related to piling
   
-  # piling.file <- "DEB_PS2.csv"
-  # pile <- read.csv(file = piling.file, header = TRUE)
   All_Dates <- strptime(pile[,3],format="%d/%m/%Y")
   All_Durations <- pile[,2]
   
@@ -140,7 +122,7 @@ results <- parallel::clusterEvalQ(cl = cl, expr = {
   disturbance.effect <- round(comb$disturbance.effect.h[dd]/24,2) # disturbance effect as a fraction of 24h (rounding is only to satisfy my esthetic needs)
   disturbance.effect <- 1 - disturbance.effect
   
-  # for dose response (bomb)
+  # for dose response
   distss <- c(12,8,6,4,2,1)
   probss <- c(0.025, 0.05, 0.075, 0.13, 0.25, 0.47)
   
@@ -154,25 +136,7 @@ results <- parallel::clusterEvalQ(cl = cl, expr = {
   source('HarbourSealDEB_Params_abc.R')
   
   #### implantation to decision on pregnancy
-  # first_day <- implant_day
-  # last_day <- decision_day_of_year - 1
-  # # determine which year of simulation is the relevant one for calculating calf survival and conception rate
-  # which.birthday <- age.affected - as.integer(age_day1/365)
-  # # determine year when background pup mortality should be set to zero
-  # # this is the current year if the first day of disturbance is decision day, and the previous year for all other disturbance
-  # which.implant <- ifelse((first_day==decision_day_of_year),which.birthday,(which.birthday-1))
-  # # check if last_day is in next calendar year
-  # if (first_day>last_day) last_day <- last_day+365
-  # j.days.to.sample <- c(first_day:last_day)
-  # dist.duration <- length(j.days.to.sample)
-  
-  # if (days.of.disturbance[1] > dist.duration) days.of.disturbance[1] <- dist.duration
-  # disturbance.number <- days.of.disturbance[1]
-  
-  #### from dublin array porpoise code
-  
-  #### from dublin array porpoise code
-  
+
   first.julian_days <- which(julian_days==first.day)
   start_pile <- first.julian_days[age.affected] # first day of piling at the age when porpoise is affected
   days.to.sample <- start_pile
@@ -182,11 +146,7 @@ results <- parallel::clusterEvalQ(cl = cl, expr = {
   # from now calculations for pup/calf death and birth, adult survival and conception are as follow
   
   ### spanning over 4 annual cycles ###
-  # pup/calf birth and deaths and adult deaths should start 
-  # at first birthing season before the piling starts 
-  # and continue after the first birthing season after piling ends
-  # to just before the next next birthing season starts
-  
+
   difStartP2B <- first.day + ((365-mean_birthday) + 10)
   start_adcalf_birthdeath_new4s <- start_pile - difStartP2B
   # end_calf_new <- start_pile + (3 * 365) # so calculations end one year after the end of last piling day
@@ -202,27 +162,7 @@ results <- parallel::clusterEvalQ(cl = cl, expr = {
   difStopP2C <- implant_day-10 - first.day
   end_calf_conc_new4s <- start_pile + (years.affected * 365) + difStopP2C
   
-  ### spanning over 3 annual cycles ###
-  # pup/calf birth and deaths and adult deaths should start 
-  # at first birthing season before the piling starts 
-  # and continue to just before the next birthing season after piling starts
-  
-  # difStartP2B <- first.day + ((365-mean_birthday) + 10)
-  # start_adcalf_birthdeath_new3s <- start_pile - difStartP2B
-  # # end_calf_new <- start_pile + (3 * 365) # so calculations end one year after the end of last piling day
-  # difStopP2B <- (mean_birthday - 10)- first.day
-  # end_adcalf_birthdeath_new3s <- start_pile + (2 * 365) + difStopP2B# so calculations end one year after the end of last piling day
-  # 
-  # # conception should start from first conception before piling to 
-  # # first conception after piling, also for grey seals
-  # 
-  # difStartP2C <- (365-implant_day+10) + first.day
-  # start_calf_conc_new3s <- start_pile - difStartP2C
-  # # end_calf_new <- start_pile + (3 * 365) # so calculations end one year after the end of last piling day
-  # difStopP2C <- implant_day-10 - first.day
-  # end_calf_conc_new3s <- start_pile + (2 * 365) + difStopP2C
-  
- 
+
   source('HarbourSealDEB_Life_Cycle.R')
   #calf_deaths_during_piling3s <- calf_births_during_piling3s  <- conceptions_during_piling3s <- ad_deaths_starvation_during_piling3s <- rep(c(0),sim_number)
   calf_deaths_during_piling4s <- calf_births_during_piling4s  <- conceptions_during_piling4s <- ad_deaths_starvation_during_piling4s <- when_born <- when_died_calves <- when_died_adults <- when_conceived <- rep(c(0),sim_number)
@@ -230,13 +170,7 @@ results <- parallel::clusterEvalQ(cl = cl, expr = {
   
   for (L3 in 1:sim_number) {
     
-    # calculations over 3 annual cycles
-    # calf_deaths_during_piling3s[L3] <- length(which(calf_deaths[start_adcalf_birthdeath_new3s:end_adcalf_birthdeath_new3s,L3]>0))
-    # calf_births_during_piling3s[L3]<- length(which(calf_age[start_adcalf_birthdeath_new3s:end_adcalf_birthdeath_new3s,L3]==1))
-    # conceptions_during_piling3s[L3] <- length(which(conceive_record[start_calf_conc_new3s:end_calf_conc_new3s,L3]>0))
-    # #calf_survivors[L3] <- length(which(calf_age[start_calf_new:end_calf_new,i]==max_age_calf))
-    # if (starve_death_day[[L3]]<end_adcalf_birthdeath_new3s & starve_death_day[L3] >= start_adcalf_birthdeath_new3s)  ad_deaths_starvation_during_piling3s[L3] <- ad_deaths_starvation_during_piling3s[L3] + 1
-    
+
     # calculations over 4 annual cycles
     calf_deaths_during_piling4s[L3] <- length(which(calf_deaths[start_adcalf_birthdeath_new4s:end_adcalf_birthdeath_new4s,L3]>0))
     calf_births_during_piling4s[L3]<- length(which(calf_age[start_adcalf_birthdeath_new4s:end_adcalf_birthdeath_new4s,L3]==1))
@@ -252,12 +186,7 @@ results <- parallel::clusterEvalQ(cl = cl, expr = {
     
   }
   
-  # for (L3 in 1:sim_number) {
-  # when_died_calves[[L3]] <- which(calf_deaths[start_adcalf_birthdeath_new3s:end_adcalf_birthdeath_new3s,L3]>0)
-  # when_born[[L3]] <- which(calf_age[start_adcalf_birthdeath_new3s:end_adcalf_birthdeath_new3s,L3]==1)
-  # when_conceived[[L3]] <- which(conceive_record[start_calf_conc_new3s:end_calf_conc_new3s,L3]>0)
-  # }
-  
+
   when_died_calves <- unlist(when_died_calves)
   if (length(when_died_calves)==0) when_died_calves <- 0
   when_born <- unlist(when_born)
@@ -278,11 +207,6 @@ results <- parallel::clusterEvalQ(cl = cl, expr = {
     when_born,
     when_conceived,
     when_died_adults
-    # calf_deaths_during_piling3s,
-    # calf_births_during_piling3s,
-    # conceptions_during_piling3s,
-    # ad_deaths_starvation_during_piling3s
-    #calf_survivors
   )
 })
 parallel::stopCluster(cl) 
@@ -290,16 +214,6 @@ parallel::stopCluster(cl)
 
 
 ## merging results as now each element of results
-
-# calf_deaths2 <- c(results[[1]][[1]],results[[2]][[1]],results[[3]][[1]],results[[4]][[1]],results[[5]][[1]],results[[6]][[1]])#,results[[7]][[1]],results[[8]][[1]],results[[9]][[1]],results[[10]][[1]],results[[11]][[1]])
-# calf_births <- c(results[[1]][[2]],results[[2]][[2]],results[[3]][[2]],results[[4]][[2]],results[[5]][[2]],results[[6]][[2]])#,results[[7]][[2]],results[[8]][[2]],results[[9]][[2]],results[[10]][[2]],results[[11]][[2]])
-# conceptions <- c(results[[1]][[3]],results[[2]][[3]],results[[3]][[3]],results[[4]][[3]],results[[5]][[3]],results[[6]][[3]])#,results[[7]][[3]],results[[8]][[3]],results[[9]][[3]],results[[10]][[3]],results[[11]][[3]])
-# ad_deaths <- c(results[[1]][[4]],results[[2]][[4]],results[[3]][[4]],results[[4]][[4]],results[[5]][[4]],results[[6]][[4]])#,results[[7]][[4]],results[[8]][[4]],results[[9]][[4]],results[[10]][[4]],results[[11]][[4]])
-# 
-# when_died_calves <- c(results[[1]][[5]],results[[2]][[5]],results[[3]][[5]],results[[4]][[5]],results[[5]][[5]],results[[6]][[5]])#,results[[7]][[5]],results[[8]][[5]],results[[9]][[5]],results[[10]][[5]],results[[11]][[5]])
-# when_born <- c(results[[1]][[6]],results[[2]][[6]],results[[3]][[6]],results[[4]][[6]],results[[5]][[6]],results[[6]][[6]])#,results[[7]][[6]],results[[8]][[6]],results[[9]][[6]],results[[10]][[6]],results[[11]][[6]])
-# when_conceived <- c(results[[1]][[7]],results[[2]][[7]],results[[3]][[7]],results[[4]][[7]],results[[5]][[7]],results[[6]][[7]])#,results[[7]][[7]],results[[8]][[7]],results[[9]][[7]],results[[10]][[7]],results[[11]][[7]])
-# when_died_adults <- c(results[[1]][[8]],results[[2]][[8]],results[[3]][[8]],results[[4]][[8]],results[[5]][[8]],results[[6]][[8]])#,results[[7]][[8]],results[[8]][[8]],results[[9]][[8]],results[[10]][[8]],results[[11]][[8]])
 
 calf_deaths4s <- c(results[[1]][[1]])
 calf_births4s <- c(results[[1]][[2]])
@@ -310,12 +224,6 @@ when_died_calves <- c(results[[1]][[5]])
 when_born <- c(results[[1]][[6]])
 when_conceived <- c(results[[1]][[7]])
 when_died_adults <- c(results[[1]][[8]])
-#calf_survivors <- c(results[[1]][[9]])
-
-# calf_deaths3s <- c(results[[1]][[9]])
-# calf_births3s <- c(results[[1]][[10]])
-# conceptions3s <- c(results[[1]][[11]])
-# ad_deaths3s <- c(results[[1]][[12]])
 
 for (nn in 2:numCores){
   calf_deaths4s <- c(calf_deaths4s,results[[nn]][[1]])
@@ -327,12 +235,6 @@ for (nn in 2:numCores){
   when_born <- c(when_born,results[[nn]][[6]])
   when_conceived <- c(when_conceived,results[[nn]][[7]])
   when_died_adults <- c(when_died_adults,results[[nn]][[8]])
-  
-  # calf_deaths3s <- c(calf_deaths3s,results[[nn]][[9]])
-  # calf_births3s <- c(calf_births3s,results[[nn]][[10]])
-  # conceptions3s <- c(conceptions3s,results[[nn]][[11]])
-  # ad_deaths3s <- c(ad_deaths3s,results[[nn]][[12]])
-  #calf_survivors <- c(calf_survivors, results[[nn]][[9]])
   
 }
 
@@ -348,20 +250,6 @@ adult_mortality4s <- sum(ad_deaths4s)/nadults
 fertility4s<- sum(conceptions4s)/nadults
 fertility4s2<- sum(conceptions4s)/sum(calf_births4s)
 
-
-# calf_survivals3s <- sum(calf_deaths3s)/sum(calf_births3s)
-# #calf_survivalsAsJohn <- sum(calf_survivors)/sum(calf_births)
-# birth_rates3s <- sum(calf_births3s)/sim_number_full
-# adult_mortality3s <- sum(ad_deaths3s)/sim_number_full
-# fertility3s<- sum(conceptions3s)/sim_number_full
-
-# the year to year calculation will be calculated as from breeding to breeding
-# season for calf/pup death and birth and adult birh
-# conception to conception season for conception
-
-# endYear1 <- 365-first.day
-# endYear2 <- (365-first.day)+365
-# endYear3 <- (365-first.day)+(2*365)
 
 # for when_died, when_born and when_conceive, start of calculations = day 1
 # pup/calf birth and death, adult death
@@ -411,10 +299,6 @@ endYear2ad <- endYear1ad + 365
 endYear3ad <- endYear1ad + (2*365)
 endYear4ad <- endYear1ad + (3*365)
 
-# endYear1ad <- start_pile+365-first.day
-# endYear2ad <- endYear1ad+365
-# endYear3ad <- endYear1ad+(2*365)
-
 diedAd <- when_died_adults
 diedAd <- diedAd[diedAd!=0]
 diedAd[diedAd>0 & diedAd<endYear1ad] <- 1
@@ -447,53 +331,3 @@ stp-st
 save(finalResultsDisturb, file="Harbour_seal_PS1_NewPeriod4vitalratesCalculations15JuneLowRmeanBomb.RData")
 save(finalResultsDisturbDeathListAd, file="Harbour_seal_PS1_NewPeriod4vitalratesCalculationsDeathListA15JuneLowRmeanBomb.RData")
 save(finalResultsDisturbDeathListPup, file="Harbour_seal_PS1_NewPeriod4vitalratesCalculationsDeathListPup15JuneLowRmeanBomb.RData")
-#load(file="Harbour_seal_PS1_lowerPS_1Mar.RData")
-
-
-
-# quick analysis of data
-# # 
-# h0 <- finalResultsDisturb[[1]]
-# h12 <- finalResultsDisturb[[43]]
-# 
-# par(mfcol=c(2,4))
-# hist(h0$calf_survivals, main="")
-# hist(h12$calf_survivals, main="")
-# hist(h0$birth_rates, main="")
-# hist(h12$birth_rates, main="")
-# hist(h0$adult_mortality, main="")
-# hist(h12$adult_mortality, main="")
-# hist(h0$fertility, main="")
-# hist(h12$fertility, main="")
-# 
-# mean(h0$BornY1)
-# mean(h0$BornY2)
-# mean(h0$BornY3)
-# 
-# mean(h0$DiedY1)
-# mean(h0$DiedY2)
-# mean(h0$DiedY3)
-# 
-# mean(h0$DiedAdY1)
-# mean(h0$DiedAdY2)
-# mean(h0$DiedAdY3)
-# 
-# mean(h0$ConcY1)
-# mean(h0$ConcY2)
-# mean(h0$ConcY3)
-# 
-# mean(h12$BornY1)
-# mean(h12$BornY2)
-# mean(h12$BornY3)
-# 
-# mean(h12$DiedY1)
-# mean(h12$DiedY2)
-# mean(h12$DiedY3)
-# 
-# mean(h12$DiedAdY1)
-# mean(h12$DiedAdY2)
-# mean(h12$DiedAdY3)
-# 
-# mean(h12$ConcY1)
-# mean(h12$ConcY2)
-# mean(h12$ConcY3)
